@@ -32,7 +32,13 @@ class PaginatedAPIMixin(object):
             }
         }
         return data
+    
 
+followers = db.Table(
+    'followers',
+    sa.Column('followers_id', sa.ForeignKey('user.id'), primary_key=True),
+    sa.Column('followed_id', sa.ForeignKey('user.id'), primary_key=True)
+)
 
 class User(PaginatedAPIMixin, TimeStampAPIMixin, db.Model):
     id: so.Mapped[int] = so.mapped_column(primary_key=True)
@@ -41,12 +47,14 @@ class User(PaginatedAPIMixin, TimeStampAPIMixin, db.Model):
     password_hash: so.Mapped[str] = so.mapped_column(sa.String(120), index=True)
     #date_created: so.Mapped[datetime] = so.mapped_column(index=True, default=lambda: datetime.now(timezone.utc))
     about_me: so.Mapped[Optional[str]] = so.mapped_column(sa.String(240), nullable=True)
-    token: so.Mapped[str] = so.mapped_column(sa.String(120), index=True, unique=True)
-    token_expiration: so.Mapped[datetime]
-    followers: so.WriteOnlyMapped['User'] = so.relationship(secondary=followers, primaryjoin=followers.c.followers_id, 
-                                                            secondaryjoin=followers.c.followed_id, back_populates="followers")
-    following: so.WriteOnlyMapped['User'] = so.relationship(secondary=followers, primaryjoin=followers.c.followed_id, 
-                                                            secondaryjoin=followers.c.followers_id, back_populates='following')
+    token: so.Mapped[Optional[str]] = so.mapped_column(sa.String(120), index=True, unique=True, nullable=False, server_default='default_token')
+    token_expiration: so.Mapped[Optional[datetime]]
+    following: so.WriteOnlyMapped['User'] = so.relationship(secondary=followers, primaryjoin=(followers.c.followed_id == id), 
+                                                            secondaryjoin=(followers.c.followers_id == id), 
+                                                            back_populates='followers')
+    followers: so.WriteOnlyMapped['User'] = so.relationship(secondary=followers, primaryjoin=(followers.c.followers_id == id), 
+                                                            secondaryjoin=(followers.c.followed_id == id), 
+                                                            back_populates="following")
 
     def __repr__(self):
         return '<User {}>'.format(self.username)
@@ -96,8 +104,3 @@ class User(PaginatedAPIMixin, TimeStampAPIMixin, db.Model):
         query = sa.select(sa.func.count()).select_from(self.following.select().subquery())
         return db.session.scalar(query)
 
-followers = db.Table(
-    "followers",
-    sa.Column('followers_id', sa.ForeignKey(User.id), primary_key=True),
-    sa.Column('followed_id', sa.ForeignKey(User.id), primary_key=True)
-)
